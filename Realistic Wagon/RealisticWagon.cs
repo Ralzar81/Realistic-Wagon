@@ -33,6 +33,7 @@ namespace RealisticWagon
         public Vector3 HorsePosition;
         public Quaternion HorseRotation;
         public Matrix4x4 HorseMatrix;
+        public string HorseName;
     }
 
 
@@ -53,6 +54,7 @@ namespace RealisticWagon
         private static Quaternion HorseRotation;
         private static GameObject Horse = null;
         private static Matrix4x4 HorseMatrix;
+        private static string HorseName;
 
         private static bool leavePrompt = true;
         private static bool mountPrompt = true;
@@ -76,7 +78,8 @@ namespace RealisticWagon
                 HorseDeployed = false,
                 HorsePosition = new Vector3(),
                 HorseRotation = new Quaternion(),
-                HorseMatrix = new Matrix4x4()
+                HorseMatrix = new Matrix4x4(),
+                HorseName = ""
             };
         }
 
@@ -94,7 +97,8 @@ namespace RealisticWagon
                 HorseDeployed = HorseDeployed,
                 HorsePosition = HorsePosition,
                 HorseRotation = HorseRotation,
-                HorseMatrix = HorseMatrix
+                HorseMatrix = HorseMatrix,
+                HorseName = HorseName
             };
         }
 
@@ -111,6 +115,7 @@ namespace RealisticWagon
             HorsePosition = realisticWagonSaveData.HorsePosition;
             HorseRotation = realisticWagonSaveData.HorseRotation;
             HorseMatrix = realisticWagonSaveData.HorseMatrix;
+            HorseName = realisticWagonSaveData.HorseName;
 
             DestroyWagon();
             if (WagonDeployed)
@@ -167,11 +172,14 @@ namespace RealisticWagon
             if (!dfUnity.IsReady || !playerEnterExit || GameManager.IsGamePaused || DaggerfallUI.Instance.FadeBehaviour.FadeInProgress)
                 return;
 
-            Debug.Log("Horse Deployed = " + HorseDeployed.ToString());
-
             if (transportManager.IsOnShip())
             {
                 return;
+            }
+
+            if ((HorseName == "" || HorseName == null) && transportManager.HasHorse())
+            {
+                NameHorse();
             }
         
             if (GameManager.Instance.PlayerController.isGrounded && !GameManager.Instance.IsPlayerInside && !transportManager.HasHorse() && GameManager.Instance.TransportManager.HasCart() && GameManager.Instance.TransportManager.TransportMode == TransportModes.Cart)
@@ -213,6 +221,7 @@ namespace RealisticWagon
             {
                 DestroyHorse();
                 HorseDeployed = false;
+                HorseName = "";
             }
         }
 
@@ -241,14 +250,10 @@ namespace RealisticWagon
             {
                 PlaceHorse(true);
             }
-            Debug.Log("Horse Deployed = "+HorseDeployed.ToString());
-            Debug.Log("Horse Position Y "+HorsePosition.y.ToString());
-            Debug.Log("Player Position Y" + GameManager.Instance.PlayerGPS.transform.up.y.ToString());
         }
 
         private static void OnTransitionExterior_InventoryCleanup(PlayerEnterExit.TransitionEventArgs args)
         {
-            Debug.Log("Cleaning up inventory");
             DaggerfallUnityItem newHorse = null;
             DaggerfallUnityItem newWagon = null;
             List<DaggerfallUnityItem> wagons = GameManager.Instance.PlayerEntity.Items.SearchItems(ItemGroups.Transportation, (int)Transportation.Small_cart);
@@ -276,7 +281,12 @@ namespace RealisticWagon
 
         private static void LeaveHorseWagonPopup()
         {
-            if (!leavePrompt)
+            if (!RoomBehind())
+            {
+                DaggerfallUI.MessageBox("There is not enough room for your wagon behind you.");
+                transportManager.TransportMode = TransportModes.Cart;
+            }
+            else if (!leavePrompt)
             {
                 LeaveWagon();
                 LeaveHorse();
@@ -284,7 +294,7 @@ namespace RealisticWagon
             else
             {
                 DaggerfallMessageBox horseWagonPopup = new DaggerfallMessageBox(DaggerfallUI.UIManager, DaggerfallUI.UIManager.TopWindow);
-                string[] message = { "Unhitch your wagon, dismount your horse and leave them?" };
+                string[] message = { "Unhitch your wagon, dismount "+HorseName+" and leave them?" };
                 horseWagonPopup.SetText(message);
                 horseWagonPopup.OnButtonClick += HorseWagonPopup_OnButtonClick;
                 horseWagonPopup.AddButton(DaggerfallMessageBox.MessageBoxButtons.Yes);
@@ -349,7 +359,12 @@ namespace RealisticWagon
 
         private static void LeaveWagonPopup()
         {
-            if (!leavePrompt)
+            if(!RoomBehind())
+            {
+                DaggerfallUI.MessageBox("There is not enough room for your wagon behind you.");
+                transportManager.TransportMode = TransportModes.Cart;
+            }
+            else if (!leavePrompt)
             {
                 LeaveWagon();
             }
@@ -474,7 +489,11 @@ namespace RealisticWagon
 
             if (hit.transform.gameObject.GetInstanceID() == Wagon.GetInstanceID())
             {
-                if(!transportManager.HasHorse())
+                if (GameManager.Instance.PlayerActivate.CurrentMode == PlayerActivateModes.Info)
+                {
+                    DaggerfallUI.AddHUDText("You see your wagon");
+                }
+                else if (!transportManager.HasHorse())
                 {
                     DaggerfallUI.MessageBox("You have no horse to pull your wagon.");
                 }
@@ -536,6 +555,11 @@ namespace RealisticWagon
 
         private static void LeaveHorsePopup()
         {
+            if (!RoomBehind())
+            {
+                DaggerfallUI.MessageBox("There is not enough room for "+HorseName+" behind you.");
+                transportManager.TransportMode = TransportModes.Horse;
+            }
             if (!leavePrompt)
             {
                 LeaveHorse();
@@ -543,7 +567,7 @@ namespace RealisticWagon
             else
             {
                 DaggerfallMessageBox horsePopup = new DaggerfallMessageBox(DaggerfallUI.UIManager, DaggerfallUI.UIManager.TopWindow);
-                string[] message = { "Dismount and leave your horse?" };
+                string[] message = { "Dismount " + HorseName + "?" };
                 horsePopup.SetText(message);
                 horsePopup.OnButtonClick += HorsePopup_OnButtonClick;
                 horsePopup.AddButton(DaggerfallMessageBox.MessageBoxButtons.Yes);
@@ -586,7 +610,7 @@ namespace RealisticWagon
             {
                 HorseMapPixel = GameManager.Instance.PlayerGPS.CurrentMapPixel;
                 SetHorsePositionAndRotation();
-                DaggerfallUI.MessageBox("You dismount your horse.");
+                DaggerfallUI.MessageBox("You dismount " + HorseName + ".");
             }
             else
             {
@@ -640,7 +664,6 @@ namespace RealisticWagon
             Ray ray = new Ray(HorsePosition, Vector3.down);
             if (Physics.Raycast(ray, out hit, 10))
             {
-                Debug.Log("Setting tent position and rotation");
                 HorsePosition = hit.point + (hit.transform.up * 1.1f);
                 HorseRotation = Quaternion.FromToRotation(Vector3.up, hit.normal);
             }
@@ -656,9 +679,13 @@ namespace RealisticWagon
 
             if (hit.transform.gameObject.GetInstanceID() == Horse.GetInstanceID())
             {
-                if (!GameManager.Instance.PlayerController.isGrounded)
+                if (GameManager.Instance.PlayerActivate.CurrentMode == PlayerActivateModes.Info)
                 {
-                    DaggerfallUI.MessageBox("You are unable to levitate your horse.");
+                    DaggerfallUI.AddHUDText("You see "+HorseName);
+                }
+                else if (!GameManager.Instance.PlayerController.isGrounded)
+                {
+                    DaggerfallUI.MessageBox(HorseName+" is unable to levitate.");
                 }
                 else
                 {
@@ -670,11 +697,11 @@ namespace RealisticWagon
                         HorseDeployed = false;
                         HorseMatrix = new Matrix4x4();
                         transportManager.TransportMode = TransportModes.Horse;
-                        DaggerfallUI.MessageBox("You mount your horse.");
+                        DaggerfallUI.MessageBox("You mount " + HorseName +".");
                     }
                     else
                     {
-                        string[] message = { "Do you wish to mount your horse?" };
+                        string[] message = { "Do you wish to mount " + HorseName + "?" };
                         horsePopUp.SetText(message);
                         horsePopUp.OnButtonClick += HorsePopUp_OnButtonClick;
                         horsePopUp.AddButton(DaggerfallMessageBox.MessageBoxButtons.Yes);
@@ -685,7 +712,7 @@ namespace RealisticWagon
             }
             else
             {
-                DaggerfallUI.MessageBox("This is not your horse.");
+                DaggerfallUI.MessageBox("This is not your "+HorseName+".");
             }
         }
 
@@ -704,7 +731,7 @@ namespace RealisticWagon
                 HorseMatrix = new Matrix4x4();
                 sender.CloseWindow();
                 transportManager.TransportMode = TransportModes.Horse;
-                DaggerfallUI.MessageBox("You mount your horse.");
+                DaggerfallUI.MessageBox("You mount your " + HorseName + ".");
             }
         }
 
@@ -718,11 +745,55 @@ namespace RealisticWagon
 
 
 
+        void NameHorse()
+        {
+            DaggerfallInputMessageBox mb = new DaggerfallInputMessageBox(DaggerfallUI.UIManager);
+            mb.SetTextBoxLabel("                                                                      Name your horse");
+            mb.TextPanelDistanceX = 0;
+            mb.TextPanelDistanceY = 0;
+            mb.InputDistanceY = 10;
+            mb.InputDistanceX = -60; 
+            mb.TextBox.Numeric = false;
+            mb.TextBox.MaxCharacters = 25;
+            mb.TextBox.Text = "";
+            mb.Show();
+            //when input is given, it passes the input into the below method for further use.
+            mb.OnGotUserInput += HorseName_OnGotUserInput;
+        }
+
+        void HorseName_OnGotUserInput(DaggerfallInputMessageBox sender, string horseNameInput)
+        {
+            if (horseNameInput == "" || horseNameInput == null)
+            {
+                HorseName = "your horse";
+            }
+            else
+            {
+                HorseName = horseNameInput;
+            }
+        }
 
 
 
+        static bool RoomBehind()
+        {
+            //GameObject player = GameManager.Instance.PlayerObject;
+            //Vector3 PlayerPosition = player.transform.position;
 
-
+            //RaycastHit hit;
+            //Ray ray = new Ray(PlayerPosition, Vector3.back);
+            //if (Physics.Raycast(ray, out hit, 6) && (hit.collider.GetComponent<MeshCollider>()))
+            //{
+            //    Debug.Log("RoomBehind = FALSE");
+            //    return false;
+            //}
+            //else
+            //{
+            //    Debug.Log("RoomBehind = TRUE");
+            //    return true;
+            //}
+            return true;
+        }
 
 
         static void DestroyWagon()
