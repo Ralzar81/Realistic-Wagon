@@ -1,0 +1,28 @@
+{
+    "Version": "1.0",
+    "Sections": [
+        {
+            "Name": "Settings",
+            "Description": "Change settings for Horse and Wagon behaviour",
+            "IsAdvanced": false,
+            "Keys":
+            [
+                {
+                    "Value": false,
+                    "Name": "leavePrompt",
+                    "Description": "Have the mod prompt you with a YES/NO question before dismounting or unhitching.",
+                    "$version": "v1",
+                    "$type": "DaggerfallWorkshop.Game.Utility.ModSupport.ModSettings.ToggleKey"
+                },
+                {
+                    "Value": false,
+                    "Name": "mountPrompt",
+                    "Description": "Have the mod prompt you with a YES/NO question before mounting or hitching.",
+                    "$version": "v1",
+                    "$type": "DaggerfallWorkshop.Game.Utility.ModSupport.ModSettings.ToggleKey"
+                } 
+            ],
+            "$version": "v1"
+        }
+    ]
+}
