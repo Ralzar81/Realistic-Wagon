@@ -631,6 +631,7 @@ namespace RealisticWagon
             {
                 Horse.SetActive(true);
             }
+            AddHorseAudioSource(Horse);
             HorseDeployed = true;
         }
 
@@ -747,18 +748,26 @@ namespace RealisticWagon
 
         void NameHorse()
         {
-            DaggerfallInputMessageBox mb = new DaggerfallInputMessageBox(DaggerfallUI.UIManager);
-            mb.SetTextBoxLabel("                                                                      Name your horse");
-            mb.TextPanelDistanceX = 0;
-            mb.TextPanelDistanceY = 0;
-            mb.InputDistanceY = 10;
-            mb.InputDistanceX = -60; 
-            mb.TextBox.Numeric = false;
-            mb.TextBox.MaxCharacters = 25;
-            mb.TextBox.Text = "";
-            mb.Show();
-            //when input is given, it passes the input into the below method for further use.
-            mb.OnGotUserInput += HorseName_OnGotUserInput;
+            if (GameManager.Instance.PlayerEntity.Name == "Daddy Azura")
+            {
+                DaggerfallUI.MessageBox("Name your horse? Nono Fuzzy, I got you : )");
+                HorseName = "Cloakly";
+            }
+            else
+            {
+                DaggerfallInputMessageBox mb = new DaggerfallInputMessageBox(DaggerfallUI.UIManager);
+                mb.SetTextBoxLabel("                                                                      Name your horse");
+                mb.TextPanelDistanceX = 0;
+                mb.TextPanelDistanceY = 0;
+                mb.InputDistanceY = 10;
+                mb.InputDistanceX = -60;
+                mb.TextBox.Numeric = false;
+                mb.TextBox.MaxCharacters = 25;
+                mb.TextBox.Text = "";
+                mb.Show();
+                //when input is given, it passes the input into the below method for further use.
+                mb.OnGotUserInput += HorseName_OnGotUserInput;
+            }
         }
 
         void HorseName_OnGotUserInput(DaggerfallInputMessageBox sender, string horseNameInput)
@@ -770,6 +779,23 @@ namespace RealisticWagon
             else
             {
                 HorseName = horseNameInput;
+            }
+        }
+
+        private static void AddHorseAudioSource(GameObject go)
+        {
+            DaggerfallAudioSource c = go.AddComponent<DaggerfallAudioSource>();
+            c.AudioSource.dopplerLevel = 0;
+            c.AudioSource.rolloffMode = AudioRolloffMode.Linear;
+            c.AudioSource.maxDistance = 5f;
+            c.AudioSource.volume = 0.7f;
+            if (GameManager.Instance.PlayerEntity.Name == "Daddy Azura")
+            {
+                c.SetSound(SoundClips.AnimalCat, AudioPresets.PlayRandomlyIfPlayerNear);
+            }
+            else
+            {
+                c.SetSound(SoundClips.AnimalHorse, AudioPresets.PlayRandomlyIfPlayerNear);
             }
         }
 
