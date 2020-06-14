@@ -56,6 +56,8 @@ namespace RealisticWagon
         private static Matrix4x4 HorseMatrix;
         private static string HorseName;
 
+        private static bool NeedToGround;
+
         private static bool leavePrompt = true;
         private static bool mountPrompt = true;
 
@@ -153,8 +155,10 @@ namespace RealisticWagon
 
             PlayerEnterExit.OnTransitionExterior += OnTransitionExterior_AdjustTransport;
             PlayerEnterExit.OnTransitionExterior += OnTransitionExterior_InventoryCleanup;
+            PlayerEnterExit.OnTransitionExterior += OnTransitionExterior_HeightExitCorrection;
             PlayerEnterExit.OnTransitionDungeonExterior += OnTransitionExterior_AdjustTransport;
             PlayerEnterExit.OnTransitionDungeonExterior += OnTransitionExterior_InventoryCleanup;
+            PlayerEnterExit.OnTransitionDungeonExterior += OnTransitionExterior_HeightExitCorrection;
 
             ModVersion = mod.ModInfo.ModVersion;
             mod.IsReady = true;
@@ -175,6 +179,21 @@ namespace RealisticWagon
             if (transportManager.IsOnShip())
             {
                 return;
+            }
+
+            if (NeedToGround)
+            {
+                if (HorseDeployed)
+                {
+                    PlaceHorseOnGround();
+                    Horse.transform.SetPositionAndRotation(HorsePosition, HorseRotation);
+                }
+                if (WagonDeployed)
+                {
+                    PlaceWagonOnGround();
+                    Wagon.transform.SetPositionAndRotation(WagonPosition, WagonRotation);
+                }
+                NeedToGround = false;
             }
 
             if ((HorseName == "" || HorseName == null) && transportManager.HasHorse())
@@ -736,7 +755,13 @@ namespace RealisticWagon
             }
         }
 
-
+        private static void OnTransitionExterior_HeightExitCorrection(PlayerEnterExit.TransitionEventArgs args)
+        {
+            if (HorseDeployed || WagonDeployed)
+            {
+                NeedToGround = true;
+            }
+        }
 
 
 
