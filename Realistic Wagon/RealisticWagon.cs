@@ -15,7 +15,6 @@ using DaggerfallWorkshop;
 using DaggerfallConnect.Utility;
 using System.Collections.Generic;
 using DaggerfallWorkshop.Game.Utility.ModSupport.ModSettings;
-using DaggerfallWorkshop.Game.MagicAndEffects;
 
 namespace RealisticWagon
 {
@@ -160,7 +159,6 @@ namespace RealisticWagon
             PlayerEnterExit.OnTransitionDungeonExterior += OnTransitionExterior_AdjustTransport;
             PlayerEnterExit.OnTransitionDungeonExterior += OnTransitionExterior_InventoryCleanup;
             PlayerEnterExit.OnTransitionDungeonExterior += OnTransitionExterior_HeightExitCorrection;
-            PlayerGPS.OnMapPixelChanged += OnMapPixelChanged_HeightAdjustet;
 
             ModVersion = mod.ModInfo.ModVersion;
             mod.IsReady = true;
@@ -465,7 +463,7 @@ namespace RealisticWagon
             }
 
             Wagon.transform.SetPositionAndRotation(WagonPosition, WagonRotation);
-            if (GameManager.Instance.PlayerEnterExit.IsPlayerInsideDungeon || GameManager.Instance.PlayerGPS.CurrentMapPixel.ToString() != WagonMapPixel.ToString())
+            if (GameManager.Instance.PlayerEnterExit.IsPlayerInsideDungeon)
             {
                 Wagon.SetActive(false);
             }
@@ -476,15 +474,23 @@ namespace RealisticWagon
             WagonDeployed = true;
         }
 
-
         private static void PlaceWagonOnGround()
         {
             RaycastHit hit;
-            Ray ray = new Ray(WagonPosition + (Vector3.up * 500), Vector3.down);
+            Ray ray = new Ray(WagonPosition, Vector3.down);
             if (Physics.Raycast(ray, out hit, 1000))
             {
                 WagonPosition = hit.point + hit.transform.up;
                 WagonRotation = Quaternion.FromToRotation(Vector3.up, hit.normal);
+            }
+            else
+            {
+                Ray rayUp = new Ray(WagonPosition, Vector3.up);
+                if (Physics.Raycast(rayUp, out hit, 1000))
+                {
+                    WagonPosition = hit.point + (hit.transform.up * 1.1f);
+                    WagonRotation = Quaternion.FromToRotation(Vector3.up, hit.normal);
+                }
             }
         }
 
@@ -639,13 +645,9 @@ namespace RealisticWagon
                 PlaceHorseOnGround();
             }
             Horse = GameObjectHelper.CreateDaggerfallBillboardGameObject(201, 0, null);
-            if (Horse == null)
-            {
-                Horse = GameObjectHelper.CreateDaggerfallBillboardGameObject(201, 0, null);
-            }
 
             Horse.transform.SetPositionAndRotation(HorsePosition, HorseRotation);
-            if (GameManager.Instance.PlayerEnterExit.IsPlayerInsideDungeon || GameManager.Instance.PlayerGPS.CurrentMapPixel.ToString() != HorseMapPixel.ToString())
+            if (GameManager.Instance.PlayerEnterExit.IsPlayerInsideDungeon)
             {
                 Horse.SetActive(false);
             }
@@ -660,11 +662,20 @@ namespace RealisticWagon
         private static void PlaceHorseOnGround()
         {
             RaycastHit hit;
-            Ray rayDown = new Ray(HorsePosition + (Vector3.up * 500), Vector3.down);
+            Ray rayDown = new Ray(HorsePosition, Vector3.down);
             if (Physics.Raycast(rayDown, out hit, 1000))
             {
                 HorsePosition = hit.point + (hit.transform.up * 1.1f);
                 HorseRotation = Quaternion.FromToRotation(Vector3.up, hit.normal);
+            }
+            else
+            {
+                Ray rayUp = new Ray(HorsePosition, Vector3.up);
+                if (Physics.Raycast(rayUp, out hit, 1000))
+                {
+                    HorsePosition = hit.point + (hit.transform.up * 1.1f);
+                    HorseRotation = Quaternion.FromToRotation(Vector3.up, hit.normal);
+                }
             }
         }
 
@@ -680,6 +691,10 @@ namespace RealisticWagon
             {
                 HorsePosition = hit.point + (hit.transform.up * 1.1f);
                 HorseRotation = Quaternion.FromToRotation(Vector3.up, hit.normal);
+            }
+            else
+            {
+                Debug.Log("Setting tent position and rotation failed");
             }
         }
 
@@ -753,37 +768,36 @@ namespace RealisticWagon
             }
         }
 
-        private static void OnMapPixelChanged_HeightAdjustet(DFPosition mapPixel)
-        {
-            if (HorseDeployed || WagonDeployed)
-            {
-                string currentMapPixel = GameManager.Instance.PlayerGPS.CurrentMapPixel.ToString();
-                if (HorseDeployed && currentMapPixel == HorseMapPixel.ToString())
-                {
-                    Horse.SetActive(true);
-                }
-                if (WagonDeployed && currentMapPixel == WagonMapPixel.ToString())
-                {
-                    Wagon.SetActive(true);
-                }
-                NeedToGround = true;
-            }
-        }
+
+
+
+
+
+
+
 
         void NameHorse()
         {
-            DaggerfallInputMessageBox mb = new DaggerfallInputMessageBox(DaggerfallUI.UIManager);
-            mb.SetTextBoxLabel("                                                                      Name your horse");
-            mb.TextPanelDistanceX = 0;
-            mb.TextPanelDistanceY = 0;
-            mb.InputDistanceY = 10;
-            mb.InputDistanceX = -60;
-            mb.TextBox.Numeric = false;
-            mb.TextBox.MaxCharacters = 25;
-            mb.TextBox.Text = "";
-            mb.Show();
-            //when input is given, it passes the input into the below method for further use.
-            mb.OnGotUserInput += HorseName_OnGotUserInput;
+            if (GameManager.Instance.PlayerEntity.Name == "Daddy Azura")
+            {
+                DaggerfallUI.MessageBox("Name your horse? Nono Fuzzy, I got you : )");
+                HorseName = "Cloakly";
+            }
+            else
+            {
+                DaggerfallInputMessageBox mb = new DaggerfallInputMessageBox(DaggerfallUI.UIManager);
+                mb.SetTextBoxLabel("                                                                      Name your horse");
+                mb.TextPanelDistanceX = 0;
+                mb.TextPanelDistanceY = 0;
+                mb.InputDistanceY = 10;
+                mb.InputDistanceX = -60;
+                mb.TextBox.Numeric = false;
+                mb.TextBox.MaxCharacters = 25;
+                mb.TextBox.Text = "";
+                mb.Show();
+                //when input is given, it passes the input into the below method for further use.
+                mb.OnGotUserInput += HorseName_OnGotUserInput;
+            }
         }
 
         void HorseName_OnGotUserInput(DaggerfallInputMessageBox sender, string horseNameInput)
