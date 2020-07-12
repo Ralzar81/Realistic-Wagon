@@ -153,10 +153,12 @@ namespace RealisticWagon
             PlayerEnterExit.OnTransitionExterior += OnTransitionExterior_AdjustTransport;
             PlayerEnterExit.OnTransitionExterior += OnTransitionExterior_InventoryCleanup;
             PlayerEnterExit.OnTransitionExterior += OnTransitionExterior_HeightExitCorrection;
+            PlayerEnterExit.OnTransitionExterior += OnTransitionExterior_TeleportCheck;
             PlayerEnterExit.OnTransitionDungeonInterior += OnTransitionInterior_SaveMapPixel;
             PlayerEnterExit.OnTransitionDungeonExterior += OnTransitionExterior_AdjustTransport;
             PlayerEnterExit.OnTransitionDungeonExterior += OnTransitionExterior_InventoryCleanup;
             PlayerEnterExit.OnTransitionDungeonExterior += OnTransitionExterior_HeightExitCorrection;
+            PlayerEnterExit.OnTransitionDungeonExterior += OnTransitionExterior_TeleportCheck;
 
             ModVersion = mod.ModInfo.ModVersion;
             mod.IsReady = true;
@@ -287,7 +289,7 @@ namespace RealisticWagon
 
         private static void OnTransitionExterior_TeleportCheck(PlayerEnterExit.TransitionEventArgs args)
         {
-            //Code for making the horse and wagon get left behind if you use recall.
+            //Code for making the horse get left behind if you use recall.
             DFPosition playerMapPixel = GameManager.Instance.PlayerGPS.CurrentMapPixel;
             if ((playerMapPixel.X != HorseMapPixel.X || playerMapPixel.Y != HorseMapPixel.Y) && transportManager.HasHorse() && !HorseDeployed)
             {
@@ -304,7 +306,7 @@ namespace RealisticWagon
                 transportManager.TransportMode = TransportModes.Foot;
                 PlaceHorse(true);
             }
-
+            //Code for making the wagon get left behind if you use recall.
             if ((playerMapPixel.X != WagonMapPixel.X || playerMapPixel.Y != WagonMapPixel.Y) && transportManager.HasCart() && !WagonDeployed)
             {
                 Debug.Log("Player has teleported without Wagon");
