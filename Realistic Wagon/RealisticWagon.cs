@@ -33,6 +33,8 @@ namespace RealisticWagon
         public Quaternion HorseRotation;
         public Matrix4x4 HorseMatrix;
         public string HorseName;
+        public DFPosition CurrentMapPixel;
+        public bool WagonClose;
     }
 
 
@@ -54,7 +56,9 @@ namespace RealisticWagon
         private static GameObject Horse = null;
         private static Matrix4x4 HorseMatrix;
         private static string HorseName;
+        private static DFPosition CurrentMapPixel;
 
+        private static bool WagonClose;
         private static bool NeedToGround;
 
         public Type SaveDataType
@@ -77,7 +81,9 @@ namespace RealisticWagon
                 HorsePosition = new Vector3(),
                 HorseRotation = new Quaternion(),
                 HorseMatrix = new Matrix4x4(),
-                HorseName = ""
+                HorseName = "",
+                CurrentMapPixel = new DFPosition(),
+                WagonClose = false
             };
         }
 
@@ -96,7 +102,9 @@ namespace RealisticWagon
                 HorsePosition = HorsePosition,
                 HorseRotation = HorseRotation,
                 HorseMatrix = HorseMatrix,
-                HorseName = HorseName
+                HorseName = HorseName,
+                CurrentMapPixel = CurrentMapPixel,
+                WagonClose = WagonClose
             };
         }
 
@@ -114,6 +122,8 @@ namespace RealisticWagon
             HorseRotation = realisticWagonSaveData.HorseRotation;
             HorseMatrix = realisticWagonSaveData.HorseMatrix;
             HorseName = realisticWagonSaveData.HorseName;
+            CurrentMapPixel = realisticWagonSaveData.CurrentMapPixel;
+            WagonClose = realisticWagonSaveData.WagonClose;
 
             DestroyWagon();
             if (WagonDeployed)
@@ -149,16 +159,17 @@ namespace RealisticWagon
             PlayerActivate.RegisterCustomActivation(mod, 41241, MountWagon);
             PlayerActivate.RegisterCustomActivation(mod, 201, 0, MountHorse);
 
-            PlayerEnterExit.OnTransitionInterior += OnTransitionInterior_SaveMapPixel;
+            PlayerEnterExit.OnPreTransition += OnPreInterior_PlaceMounts;
+            PlayerEnterExit.OnTransitionInterior += OnTransitionInterior_GiveTempWagon;
+            PlayerEnterExit.OnTransitionExterior += OnTransitionExterior_DropTempWagon;
             PlayerEnterExit.OnTransitionExterior += OnTransitionExterior_AdjustTransport;
             PlayerEnterExit.OnTransitionExterior += OnTransitionExterior_InventoryCleanup;
             PlayerEnterExit.OnTransitionExterior += OnTransitionExterior_HeightExitCorrection;
-            PlayerEnterExit.OnTransitionExterior += OnTransitionExterior_TeleportCheck;
-            PlayerEnterExit.OnTransitionDungeonInterior += OnTransitionInterior_SaveMapPixel;
+            PlayerEnterExit.OnTransitionDungeonInterior += OnTransitionInterior_GiveTempWagon;
+            PlayerEnterExit.OnTransitionDungeonExterior += OnTransitionExterior_DropTempWagon;
             PlayerEnterExit.OnTransitionDungeonExterior += OnTransitionExterior_AdjustTransport;
             PlayerEnterExit.OnTransitionDungeonExterior += OnTransitionExterior_InventoryCleanup;
             PlayerEnterExit.OnTransitionDungeonExterior += OnTransitionExterior_HeightExitCorrection;
-            PlayerEnterExit.OnTransitionDungeonExterior += OnTransitionExterior_TeleportCheck;
 
             ModVersion = mod.ModInfo.ModVersion;
             mod.IsReady = true;
@@ -233,7 +244,7 @@ namespace RealisticWagon
             }
             
 
-            if (transportManager.HasCart() && WagonDeployed)
+            if (transportManager.HasCart() && WagonDeployed && !playerEnterExit.IsPlayerInsideDungeon && !WagonClose)
             {
                 NewWagonPopUp();
             }
@@ -245,18 +256,50 @@ namespace RealisticWagon
             }
         }
 
-        private static void OnTransitionInterior_SaveMapPixel(PlayerEnterExit.TransitionEventArgs args)
+        private static void OnPreInterior_PlaceMounts(PlayerEnterExit.TransitionEventArgs args)
         {
-            if (!HorseDeployed && transportManager.HasHorse())
+            CurrentMapPixel = GameManager.Instance.PlayerGPS.CurrentMapPixel;
+
+            if (!playerEnterExit.IsPlayerInside)
             {
-                HorsePosition = GameManager.Instance.PlayerObject.transform.position - (GameManager.Instance.PlayerObject.transform.forward * -1);
-                HorseMatrix = GameManager.Instance.PlayerObject.transform.localToWorldMatrix;
-                HorseMapPixel = GameManager.Instance.PlayerGPS.CurrentMapPixel;
+                if (transportManager.HasCart())
+                {
+                    LeaveWagon();
+                }
+                if (transportManager.HasHorse())
+                {
+                    LeaveHorse();
+                }
+                transportManager.TransportMode = TransportModes.Foot;
             }
-            if (WagonMapPixel == null && transportManager.HasCart())
+        }
+        
+
+        private static void OnTransitionInterior_GiveTempWagon(PlayerEnterExit.TransitionEventArgs args)
+        {
+            if (WagonDeployed && CurrentMapPixel.Y == WagonMapPixel.Y && CurrentMapPixel.X == WagonMapPixel.X)
             {
-                SetWagonPositionAndRotation();
-                WagonMapPixel = GameManager.Instance.PlayerGPS.CurrentMapPixel;
+                WagonClose = true;
+                DaggerfallUnityItem wagon = ItemBuilder.CreateItem(ItemGroups.Transportation, (int)Transportation.Small_cart);
+                wagon.value = 0;
+                GameManager.Instance.PlayerEntity.Items.AddItem(wagon);
+            }
+        }
+
+        private static void OnTransitionExterior_DropTempWagon(PlayerEnterExit.TransitionEventArgs args)
+        {
+            WagonClose = false;
+            if (WagonDeployed)
+            {
+                ItemCollection playerItems = GameManager.Instance.PlayerEntity.Items;
+                for (int i = 0; i < playerItems.Count; i++)
+                {
+                    DaggerfallUnityItem item = playerItems.GetItem(i);
+                    if (item != null && item.IsOfTemplate(ItemGroups.Transportation, (int)Transportation.Small_cart))
+                    {
+                        playerItems.RemoveItem(item);
+                    }
+                }
             }
         }
 
@@ -284,50 +327,6 @@ namespace RealisticWagon
             if (HorseDeployed)
             {
                 PlaceHorse(true);
-            }
-        }
-
-        private static void OnTransitionExterior_TeleportCheck(PlayerEnterExit.TransitionEventArgs args)
-        {
-            //Code for making the horse get left behind if you use recall.
-            DFPosition playerMapPixel = GameManager.Instance.PlayerGPS.CurrentMapPixel;
-            if ((playerMapPixel.X != HorseMapPixel.X || playerMapPixel.Y != HorseMapPixel.Y) && transportManager.HasHorse() && !HorseDeployed)
-            {
-                Debug.Log("Player has teleported without horse");
-                ItemCollection playerItems = GameManager.Instance.PlayerEntity.Items;
-                for (int i = 0; i < playerItems.Count; i++)
-                {
-                    DaggerfallUnityItem item = playerItems.GetItem(i);
-                    if (item != null && item.IsOfTemplate(ItemGroups.Transportation, (int)Transportation.Horse))
-                    {
-                        playerItems.RemoveItem(item);
-                    }
-                }
-                transportManager.TransportMode = TransportModes.Foot;
-                PlaceHorse(true);
-            }
-            //Code for making the wagon get left behind if you use recall.
-            if ((playerMapPixel.X != WagonMapPixel.X || playerMapPixel.Y != WagonMapPixel.Y) && transportManager.HasCart() && !WagonDeployed)
-            {
-                Debug.Log("Player has teleported without Wagon");
-                ItemCollection playerItems = GameManager.Instance.PlayerEntity.Items;
-                for (int i = 0; i < playerItems.Count; i++)
-                {
-                    DaggerfallUnityItem item = playerItems.GetItem(i);
-                    if (item != null && item.IsOfTemplate(ItemGroups.Transportation, (int)Transportation.Small_cart))
-                    {
-                        playerItems.RemoveItem(item);
-                    }
-                }
-                if (transportManager.HasHorse() && !GameManager.Instance.IsPlayerInside)
-                {
-                    transportManager.TransportMode = TransportModes.Horse;
-                }
-                else
-                {
-                    transportManager.TransportMode = TransportModes.Foot;
-                }                
-                PlaceWagon(true);
             }
         }
 
@@ -492,7 +491,7 @@ namespace RealisticWagon
             }
             else
             {
-                Ray rayUp = new Ray(WagonPosition, Vector3.up);
+                Ray rayUp = new Ray(WagonPosition + (Vector3.up * 500), Vector3.down);
                 if (Physics.Raycast(rayUp, out hit, 1000))
                 {
                     WagonPosition = hit.point + (hit.transform.up * 1.1f);
@@ -617,7 +616,7 @@ namespace RealisticWagon
             }
             else
             {
-                Ray rayUp = new Ray(HorsePosition, Vector3.up);
+                Ray rayUp = new Ray(HorsePosition + (Vector3.up * 500), Vector3.down);
                 if (Physics.Raycast(rayUp, out hit, 1000))
                 {
                     HorsePosition = hit.point + (hit.transform.up * 1.1f);
