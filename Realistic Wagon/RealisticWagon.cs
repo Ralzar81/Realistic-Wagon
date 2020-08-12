@@ -217,16 +217,20 @@ namespace RealisticWagon
                 else if (transportManager.HasHorse() && GameManager.Instance.TransportManager.HasCart() && GameManager.Instance.TransportManager.TransportMode == TransportModes.Foot)
                 {
                     LeaveHorseWagon();
+                    DaggerfallUI.MessageBox("You unhitch your wagon.");
+                    DaggerfallUI.MessageBox("You dismount " + HorseName + ".");
                 }
                 //If you have wagon and horse, but change to Horse, wagon is dropped.
                 else if (transportManager.HasCart() && GameManager.Instance.TransportManager.TransportMode == TransportModes.Horse)
                 {
                     LeaveWagon();
+                    DaggerfallUI.MessageBox("You unhitch your wagon.");
                 }
                 //If you have horse, but change to foot, horse is dropped.
                 else if (transportManager.HasHorse() && GameManager.Instance.TransportManager.TransportMode == TransportModes.Foot)
                 {
                     LeaveHorse();
+                    DaggerfallUI.MessageBox("You dismount " + HorseName + ".");
                 }
             }
 
@@ -455,7 +459,6 @@ namespace RealisticWagon
                 else
                 {
                     SetWagonPositionAndRotation();
-                    DaggerfallUI.MessageBox("You unhitch your wagon.");
                 }
             }
             else
@@ -583,7 +586,6 @@ namespace RealisticWagon
             {
                 HorseMapPixel = GameManager.Instance.PlayerGPS.CurrentMapPixel;
                 SetHorsePositionAndRotation();
-                DaggerfallUI.MessageBox("You dismount " + HorseName + ".");
             }
             else
             {
