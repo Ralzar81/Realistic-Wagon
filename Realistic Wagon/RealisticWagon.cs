@@ -64,6 +64,8 @@ namespace RealisticWagon
         private static bool NeedToGroundHorse;
         private static bool NeedToGroundWagon;
 
+        private static bool HandPaintedModels = false;
+
         public Type SaveDataType
         {
             get { return typeof(RealisticWagonSaveData); }
@@ -180,6 +182,14 @@ namespace RealisticWagon
 
             ModVersion = mod.ModInfo.ModVersion;
             mod.IsReady = true;
+        }
+
+        void Awake()
+        {
+            Mod hpm = ModManager.Instance.GetMod("Handpainted Models - Main");
+            if (hpm != null)
+                HandPaintedModels = true;
+            Debug.Log("HPM = " + HandPaintedModels.ToString());
         }
 
         private void Update()
@@ -544,21 +554,35 @@ namespace RealisticWagon
         private static void PlaceWagonOnGround()
         {
             RaycastHit hit;
-            Ray ray = new Ray(WagonPosition, Vector3.down);
+            Ray ray;
+            if (!HandPaintedModels)
+                ray = new Ray(WagonPosition, Vector3.down);
+            else
+                ray = new Ray(WagonPosition + (Vector3.down * 0.5f), Vector3.down);
             if (Physics.Raycast(ray, out hit, 1000))
             {
-                WagonPosition = hit.point + hit.transform.up;
-                WagonRotation = Quaternion.FromToRotation(Vector3.up, hit.normal);
+                if (!HandPaintedModels)
+                {
+                    WagonPosition = hit.point + hit.transform.up;
+                }
+                else
+                    WagonPosition = hit.point + (hit.transform.up * 0.8f);
+            
             }
             else
             {
                 Ray rayUp = new Ray(WagonPosition + (Vector3.up * 500), Vector3.down);
                 if (Physics.Raycast(rayUp, out hit, 1000))
                 {
-                    WagonPosition = hit.point + (hit.transform.up * 1.1f);
-                    WagonRotation = Quaternion.FromToRotation(Vector3.up, hit.normal);
+                    if (!HandPaintedModels)
+                    {
+                        WagonPosition = hit.point + hit.transform.up;
+                    }
+                    else
+                        WagonPosition = hit.point + (hit.transform.up * 0.8f);
                 }
             }
+            WagonRotation = Quaternion.FromToRotation(Vector3.up, hit.normal);
         }
 
         private static void SetWagonPositionAndRotation(bool front = false)
@@ -570,10 +594,20 @@ namespace RealisticWagon
             WagonMatrix = player.transform.localToWorldMatrix;
 
             RaycastHit hit;
-            Ray ray = new Ray(WagonPosition, Vector3.down);
+            Ray ray;
+            if (!HandPaintedModels)
+                ray = new Ray(WagonPosition, Vector3.down);
+            else
+                ray = new Ray(WagonPosition + (Vector3.down * 0.5f), Vector3.down);
             if (Physics.Raycast(ray, out hit, 10))
             {
-                WagonPosition = hit.point + hit.transform.up;
+                if (!HandPaintedModels)
+                {
+                    WagonPosition = hit.point + hit.transform.up;
+                }
+                else
+                    WagonPosition = hit.point + (hit.transform.up * 0.8f);
+
                 WagonRotation = Quaternion.FromToRotation(Vector3.up, hit.normal);
             }
         }        
