@@ -5,6 +5,7 @@
 
 using System;
 using UnityEngine;
+using Wenzil.Console;
 using DaggerfallWorkshop.Game;
 using DaggerfallWorkshop.Game.Utility.ModSupport;
 using DaggerfallWorkshop.Utility.AssetInjection;
@@ -178,6 +179,8 @@ namespace RealisticWagon
             PlayerEnterExit.OnTransitionDungeonExterior += OnTransitionExterior_HeightExitCorrection;
             //PlayerGPS.OnMapPixelChanged += OnMapPixelChanged_RegisterONMR;
             EntityEffectBroker.OnNewMagicRound += OnNewMagicRound_PlaceMounts;
+            PlayerEnterExit.OnTransitionInterior += OnTransitionInterior_PlaceMounts;
+            PlayerEnterExit.OnTransitionExterior += OnTransitionExterior_PlaceMounts;
 
 
             ModVersion = mod.ModInfo.ModVersion;
@@ -189,7 +192,11 @@ namespace RealisticWagon
             Mod hpm = ModManager.Instance.GetMod("Handpainted Models - Main");
             if (hpm != null)
                 HandPaintedModels = true;
-            Debug.Log("HPM = " + HandPaintedModels.ToString());
+        }
+
+        void Start()
+        {
+            RegisterRWCommands();
         }
 
         private void Update()
@@ -283,16 +290,32 @@ namespace RealisticWagon
             }
         }
 
+        private static void OnTransitionInterior_PlaceMounts(PlayerEnterExit.TransitionEventArgs args)
+        {
+            if (Horse != null)
+                Horse.SetActive(false);
+            if (Wagon != null)
+                Wagon.SetActive(false);
+        }
+
+        private static void OnTransitionExterior_PlaceMounts(PlayerEnterExit.TransitionEventArgs args)
+        {
+            OnNewMagicRound_PlaceMounts();
+        }
+
         private static void OnNewMagicRound_PlaceMounts()
         {
             if (HorseDeployed || WagonDeployed)
             {
+                //GameObject player = GameObject.FindGameObjectWithTag("Player");
                 int playerX = GameManager.Instance.PlayerGPS.CurrentMapPixel.X;
                 int playerY = GameManager.Instance.PlayerGPS.CurrentMapPixel.Y;
-                //GameObject player = GameManager.Instance.PlayerObject;
-                if (HorseDeployed)
+
+                GameObject player = GameManager.Instance.PlayerObject;
+                if (HorseDeployed && Horse != null)
                 {
-                    if (playerX == HorseMapPixel.X && playerY == HorseMapPixel.Y)
+                    //float horseDistance = Vector3.Distance(player.transform.position, Horse.transform.position);
+                    if (playerX == HorseMapPixel.X && playerY == HorseMapPixel.Y && !playerEnterExit.IsPlayerInside)
                     {
                         Horse.SetActive(true);
                         NeedToGroundHorse = true;
@@ -302,9 +325,10 @@ namespace RealisticWagon
                         Horse.SetActive(false);
                     }
                 }
-                if (WagonDeployed)
+                if (WagonDeployed && Wagon != null)
                 {
-                    if (playerX == WagonMapPixel.X && playerY == WagonMapPixel.Y)
+                    //float wagonDistance = Vector3.Distance(player.transform.position, Wagon.transform.position);
+                    if (playerX == WagonMapPixel.X && playerY == WagonMapPixel.Y && !playerEnterExit.IsPlayerInside)
                     {
                         Wagon.SetActive(true);
                         NeedToGroundWagon = true;
@@ -327,6 +351,7 @@ namespace RealisticWagon
                 //}
             }
         }
+ 
 
         private static void OnPreInterior_PlaceMounts(PlayerEnterExit.TransitionEventArgs args)
         {
@@ -566,13 +591,15 @@ namespace RealisticWagon
                     WagonPosition = hit.point + hit.transform.up;
                 }
                 else
-                    WagonPosition = hit.point + (hit.transform.up * 0.8f);
-            
+                    WagonPosition = hit.point + (hit.transform.up * 0.8f);           
             }
             else
             {
-                Ray rayUp = new Ray(WagonPosition + (Vector3.up * 500), Vector3.down);
-                if (Physics.Raycast(rayUp, out hit, 1000))
+                GameObject player = GameObject.FindGameObjectWithTag("Player");
+                Vector3 newWagonPos = WagonPosition;
+                newWagonPos.y = player.transform.position.y;
+                Ray rayFromPlayer = new Ray(newWagonPos + Vector3.up, Vector3.down);
+                if (Physics.Raycast(rayFromPlayer, out hit, 1000))
                 {
                     if (!HandPaintedModels)
                     {
@@ -580,6 +607,19 @@ namespace RealisticWagon
                     }
                     else
                         WagonPosition = hit.point + (hit.transform.up * 0.8f);
+                }
+                else
+                {
+                    Ray rayUp = new Ray(newWagonPos + (Vector3.up * 500f), Vector3.down);
+                    if (Physics.Raycast(rayUp, out hit, 1000))
+                    {
+                        if (!HandPaintedModels)
+                        {
+                            WagonPosition = hit.point + hit.transform.up;
+                        }
+                        else
+                            WagonPosition = hit.point + (hit.transform.up * 0.8f);
+                    }
                 }
             }
             WagonRotation = Quaternion.FromToRotation(Vector3.up, hit.normal);
@@ -624,7 +664,9 @@ namespace RealisticWagon
                 }
                 else if (!transportManager.HasHorse())
                 {
-                    DaggerfallUI.MessageBox("You have no horse to pull your wagon.");
+                    //DaggerfallUI.MessageBox("You have no horse to pull your wagon.");
+                    DaggerfallUI.Instance.InventoryWindow.AllowDungeonWagonAccess();
+                    DaggerfallUI.PostMessage(DaggerfallUIMessages.dfuiOpenInventoryWindow);
                 }
                 else if (!GameManager.Instance.PlayerController.isGrounded)
                 {
@@ -710,11 +752,23 @@ namespace RealisticWagon
             }
             else
             {
-                Ray rayUp = new Ray(HorsePosition + (Vector3.up * 500f), Vector3.down);
-                if (Physics.Raycast(rayUp, out hit, 1000))
+                GameObject player = GameObject.FindGameObjectWithTag("Player");
+                Vector3 newHorsePos = HorsePosition;
+                newHorsePos.y = player.transform.position.y;
+                Ray rayFromPlayer = new Ray(newHorsePos + Vector3.up, Vector3.down);
+                if (Physics.Raycast(rayFromPlayer, out hit, 1000))
                 {
                     HorsePosition = hit.point + (hit.transform.up * 1.1f);
                     HorseRotation = Quaternion.FromToRotation(Vector3.up, hit.normal);
+                }
+                else
+                {
+                    Ray rayUp = new Ray(newHorsePos + (Vector3.up * 500f), Vector3.down);
+                    if (Physics.Raycast(rayUp, out hit, 1000))
+                    {
+                        HorsePosition = hit.point + (hit.transform.up * 1.1f);
+                        HorseRotation = Quaternion.FromToRotation(Vector3.up, hit.normal);
+                    }
                 }
             }
         }
@@ -764,12 +818,12 @@ namespace RealisticWagon
                     HorseDeployed = false;
                     HorseMatrix = new Matrix4x4();
                     transportManager.TransportMode = TransportModes.Horse;
-                    DaggerfallUI.MessageBox("You mount " + HorseName +".");                    
+                    DaggerfallUI.MessageBox("You mount " + HorseName + ".");                    
                 }
             }
             else
             {
-                DaggerfallUI.MessageBox("This is not your "+HorseName+".");
+                DaggerfallUI.MessageBox("This is not " + HorseName + ".");
             }
         }
 
@@ -790,7 +844,7 @@ namespace RealisticWagon
         void NameHorse()
         {
                 DaggerfallInputMessageBox mb = new DaggerfallInputMessageBox(DaggerfallUI.UIManager);
-                mb.SetTextBoxLabel("                                                            Name your horse");
+                mb.SetTextBoxLabel("                                                 Name your horse");
                 mb.TextPanelDistanceX = 0;
                 mb.TextPanelDistanceY = 0;
                 mb.InputDistanceY = 10;
@@ -874,6 +928,67 @@ namespace RealisticWagon
             {
                 Destroy(Horse);
                 Horse = null;
+            }
+        }
+
+
+        public static void RegisterRWCommands()
+        {
+            Debug.Log("[Realistic Wagon] Trying to register console commands.");
+            try
+            {
+                ConsoleCommandsDatabase.RegisterCommand(GetWagon.name, GetWagon.description, GetWagon.usage, GetWagon.Execute);
+                ConsoleCommandsDatabase.RegisterCommand(GetHorse.name, GetHorse.description, GetHorse.usage, GetHorse.Execute);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError(string.Format("Error Registering RealisticWagon Console commands: {0}", e.Message));
+            }
+        }
+
+        private static class GetWagon
+        {
+            public static readonly string name = "wagon_rescue";
+            public static readonly string description = "Place wagon behind player.";
+            public static readonly string usage = "wagon_rescue";
+
+            public static string Execute(params string[] args)
+            {
+                string result = "error";
+                if (!WagonDeployed)
+                    result = "No wagon to rescue";
+                else if (!playerEnterExit.IsPlayerInside && GameManager.Instance.PlayerController.isGrounded)
+                {
+                    DestroyWagon();
+                    PlaceWagon();
+                    result = "Wagon Rescued";
+                }
+                else
+                    result = "Command only possible while on the ground outside.";
+                return result;
+            }
+        }
+
+        private static class GetHorse
+        {
+            public static readonly string name = "horse_rescue";
+            public static readonly string description = "Place horse behind player.";
+            public static readonly string usage = "horse_rescue";
+
+            public static string Execute(params string[] args)
+            {
+                string result = "error";
+                if (!WagonDeployed)
+                    result = "No horse to rescue";
+                else if (!playerEnterExit.IsPlayerInside && GameManager.Instance.PlayerController.isGrounded)
+                {
+                    DestroyHorse();
+                    PlaceHorse();
+                    result = "Horse Rescued";
+                }
+                else
+                    result = "Command only possible while on the ground outside.";
+                return result;
             }
         }
     }

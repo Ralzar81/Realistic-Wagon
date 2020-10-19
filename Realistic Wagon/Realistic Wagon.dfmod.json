@@ -1,9 +1,9 @@
 {
     "ModTitle": "Realistic Wagon",
-    "ModVersion": "0.4.2",
+    "ModVersion": "0.5.2",
     "ModAuthor": "Ralzar",
     "ContactInfo": "www.dfworkshop.net",
-    "DFUnity_Version": "0.10.26",
+    "DFUnity_Version": "0.10.27",
     "ModDescription": "Changes wagon to act like an actual wagon. You have to drive it to take it with you.",
     "GUID": "a30d1974-4d5d-477b-91c0-83f7f4bbd64b",
     "Files": [
