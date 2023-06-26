@@ -17,6 +17,8 @@ using DaggerfallConnect.Utility;
 using System.Collections.Generic;
 using DaggerfallWorkshop.Game.Entity;
 using DaggerfallWorkshop.Game.MagicAndEffects;
+using DaggerfallConnect.Arena2;
+using DaggerfallWorkshop.Game.Utility;
 
 namespace RealisticWagon
 {
@@ -38,6 +40,7 @@ namespace RealisticWagon
         public string HorseName;
         public DFPosition CurrentMapPixel;
         public bool WagonClose;
+        public DaggerfallUnityItem WagonItem;
     }
 
 
@@ -45,12 +48,17 @@ namespace RealisticWagon
     {
         private static string ModVersion;
 
+        public const int templateIndex_SugarLumps = 541;
+        public const int templateIndex_WagonParts = 542;
+        public const int templateIndex_Horse = 548;
+
         private static DFPosition WagonMapPixel = null;
         private static bool WagonDeployed = false;
         private static Vector3 WagonPosition;
         private static Quaternion WagonRotation;
         private static GameObject Wagon = null;
         private static Matrix4x4 WagonMatrix;
+        private static DaggerfallUnityItem WagonItem;
 
         private static DFPosition HorseMapPixel = null;
         private static bool HorseDeployed = false;
@@ -66,6 +74,8 @@ namespace RealisticWagon
         private static bool NeedToGroundWagon;
 
         private static bool HandPaintedModels = false;
+
+        private static int WagonDmgCounter = 0;
 
         public Type SaveDataType
         {
@@ -87,9 +97,11 @@ namespace RealisticWagon
                 HorsePosition = new Vector3(),
                 HorseRotation = new Quaternion(),
                 HorseMatrix = new Matrix4x4(),
-                HorseName = "",
+                HorseName = null,
                 CurrentMapPixel = new DFPosition(),
-                WagonClose = false
+                WagonClose = false,
+                WagonItem = null
+
             };
         }
 
@@ -110,7 +122,8 @@ namespace RealisticWagon
                 HorseMatrix = HorseMatrix,
                 HorseName = HorseName,
                 CurrentMapPixel = CurrentMapPixel,
-                WagonClose = WagonClose
+                WagonClose = WagonClose,
+                WagonItem = WagonItem
             };
         }
 
@@ -130,6 +143,13 @@ namespace RealisticWagon
             HorseName = realisticWagonSaveData.HorseName;
             CurrentMapPixel = realisticWagonSaveData.CurrentMapPixel;
             WagonClose = realisticWagonSaveData.WagonClose;
+            WagonItem = realisticWagonSaveData.WagonItem;
+
+            if (WagonItem == null)
+            {
+                DaggerfallUnityItem newWagon = ItemBuilder.CreateItem(ItemGroups.Transportation, (int)Transportation.Small_cart);
+                WagonItem = newWagon;
+            }
 
             DestroyWagon();
             if (WagonDeployed)
@@ -164,8 +184,15 @@ namespace RealisticWagon
             mod.SaveDataInterface = instance;
 
             PlayerActivate.RegisterCustomActivation(mod, 41241, MountWagon);
-            PlayerActivate.RegisterCustomActivation(mod, 201, 0, MountHorse);
+            PlayerActivate.RegisterCustomActivation(mod, templateIndex_Horse, 0, MountHorse);
 
+            DaggerfallUnity.Instance.ItemHelper.RegisterCustomItem(templateIndex_SugarLumps, ItemGroups.UselessItems2);
+            DaggerfallUnity.Instance.ItemHelper.RegisterItemUseHandler(templateIndex_SugarLumps, CallHorse);
+
+            DaggerfallUnity.Instance.ItemHelper.RegisterCustomItem(templateIndex_WagonParts, ItemGroups.UselessItems2);
+            DaggerfallUnity.Instance.ItemHelper.RegisterItemUseHandler(templateIndex_WagonParts, RepairWagon);
+
+            StartGameBehaviour.OnStartGame += ResetValues_OnStartGame;
             PlayerEnterExit.OnPreTransition += OnPreInterior_PlaceMounts;
             PlayerEnterExit.OnTransitionInterior += OnTransitionInterior_GiveTempWagon;
             PlayerEnterExit.OnTransitionExterior += OnTransitionExterior_DropTempWagon;
@@ -181,7 +208,7 @@ namespace RealisticWagon
             EntityEffectBroker.OnNewMagicRound += OnNewMagicRound_PlaceMounts;
             PlayerEnterExit.OnTransitionInterior += OnTransitionInterior_PlaceMounts;
             PlayerEnterExit.OnTransitionExterior += OnTransitionExterior_PlaceMounts;
-
+            EntityEffectBroker.OnNewMagicRound += OnNewMagicRound_WagonDamage;
 
             ModVersion = mod.ModInfo.ModVersion;
             mod.IsReady = true;
@@ -247,20 +274,20 @@ namespace RealisticWagon
                 else if (transportManager.HasHorse() && GameManager.Instance.TransportManager.HasCart() && GameManager.Instance.TransportManager.TransportMode == TransportModes.Foot)
                 {
                     LeaveHorseWagon();
-                    DaggerfallUI.MessageBox("You unhitch your wagon.");
-                    DaggerfallUI.MessageBox("You dismount " + HorseName + ".");
+                    DaggerfallUI.AddHUDText("You unhitch your wagon.");
+                    DaggerfallUI.AddHUDText("You dismount " + HorseName + ".");
                 }
                 //If you have wagon and horse, but change to Horse, wagon is dropped.
                 else if (transportManager.HasCart() && GameManager.Instance.TransportManager.TransportMode == TransportModes.Horse)
                 {
                     LeaveWagon();
-                    DaggerfallUI.MessageBox("You unhitch your wagon.");
+                    DaggerfallUI.AddHUDText("You unhitch your wagon.");
                 }
                 //If you have horse, but change to foot, horse is dropped.
                 else if (transportManager.HasHorse() && GameManager.Instance.TransportManager.TransportMode == TransportModes.Foot)
                 {
                     LeaveHorse();
-                    DaggerfallUI.MessageBox("You dismount " + HorseName + ".");
+                    DaggerfallUI.AddHUDText("You dismount " + HorseName + ".");
                 }
             }
 
@@ -276,7 +303,19 @@ namespace RealisticWagon
                 }
                 transportManager.TransportMode = TransportModes.Foot;
             }
-            
+
+            if (transportManager.HasCart() && WagonItem == null)
+            {
+                ItemCollection playerItems = GameManager.Instance.PlayerEntity.Items;
+                for (int i = 0; i < playerItems.Count; i++)
+                {
+                    DaggerfallUnityItem item = playerItems.GetItem(i);
+                    if (item != null && item.IsOfTemplate(ItemGroups.Transportation, (int)Transportation.Small_cart))
+                    {
+                        WagonItem = item;
+                    }
+                }
+            }
 
             if (transportManager.HasCart() && WagonDeployed && !playerEnterExit.IsPlayerInsideDungeon && !WagonClose)
             {
@@ -288,6 +327,27 @@ namespace RealisticWagon
                 HorseDeployed = false;
                 HorseName = "";
             }
+        }
+
+        private static void ResetValues_OnStartGame(object sender, EventArgs e)
+        {
+            DestroyWagon();
+            DestroyHorse();
+            WagonMapPixel = null;
+            WagonDeployed = false;
+            WagonPosition = new Vector3();
+            WagonRotation = new Quaternion();
+            WagonMatrix = new Matrix4x4();
+
+            HorseMapPixel = null;
+            HorseDeployed = false;
+            HorsePosition = new Vector3();
+            HorseRotation = new Quaternion();
+            HorseMatrix = new Matrix4x4();
+            HorseName = "";
+
+            CurrentMapPixel = null;
+            WagonItem = null;     
         }
 
         private static void OnTransitionInterior_PlaceMounts(PlayerEnterExit.TransitionEventArgs args)
@@ -473,7 +533,14 @@ namespace RealisticWagon
         private static void NewWagonPopUp()
         {
             DaggerfallMessageBox newWagonPopup = new DaggerfallMessageBox(DaggerfallUI.UIManager, DaggerfallUI.UIManager.TopWindow);
-            string[] message = { "Do you wish to abandon your old wagon and start using your new wagon?" };
+            string wagonPrompt;
+            if (IsWagonClose())
+                wagonPrompt = "Do you wish to abandon your old wagon and transfer items to your new wagon?";
+            else
+                wagonPrompt = "Do you wish to abandon your old wagon and its items?";
+
+            string[] message = { wagonPrompt };
+            
             newWagonPopup.SetText(message);
             newWagonPopup.OnButtonClick += NewWagonPopup_OnButtonClick;
             newWagonPopup.AddButton(DaggerfallMessageBox.MessageBoxButtons.Yes);
@@ -488,7 +555,18 @@ namespace RealisticWagon
                 sender.CloseWindow();
                 DestroyWagon();
                 WagonDeployed = false;
-                GameManager.Instance.PlayerEntity.WagonItems.Clear();
+                if (!IsWagonClose())
+                    GameManager.Instance.PlayerEntity.WagonItems.Clear();
+
+                ItemCollection playerItems = GameManager.Instance.PlayerEntity.Items;
+                for (int i = 0; i < playerItems.Count; i++)
+                {
+                    DaggerfallUnityItem item = playerItems.GetItem(i);
+                    if (item != null && item.IsOfTemplate(ItemGroups.Transportation, (int)Transportation.Small_cart))
+                    {
+                        WagonItem = item;
+                    }
+                }
             }
             else
             {
@@ -527,6 +605,9 @@ namespace RealisticWagon
                     }
                 }
                 PlaceWagon();
+                GameObject player = GameObject.FindGameObjectWithTag("Player");
+                Wagon.transform.LookAt(player.transform.position - (Vector3.up * 1.2f), Vector3.up);
+                WagonRotation = Wagon.transform.rotation;
             }
         }
 
@@ -563,7 +644,23 @@ namespace RealisticWagon
             {
                 Wagon = GameObjectHelper.CreateDaggerfallMeshGameObject(wagonModelID, null);
             }
-
+            MeshRenderer wagonMR = Wagon.GetComponent<MeshRenderer>();
+            Material[] materials = wagonMR.materials;
+            for (int i = 0; i < materials.Length; i++)
+            {
+                if (materials[i].name == "TEXTURE.088 [Index=2] (Instance)")
+                {
+                    Material newMaterial = DaggerfallUnity.Instance.MaterialReader.GetMaterial(431, 3);
+                    materials[i] = newMaterial;
+                    wagonMR.materials = materials;
+                }
+                if (materials[i].name == "TEXTURE.088 [Index=3] (Instance)")
+                {
+                    Material newMaterial = DaggerfallUnity.Instance.MaterialReader.GetMaterial(431, 0);
+                    materials[i] = newMaterial;
+                    wagonMR.materials = materials;
+                }
+            }
             Wagon.transform.SetPositionAndRotation(WagonPosition, WagonRotation);
             if (GameManager.Instance.PlayerEnterExit.IsPlayerInsideDungeon)
             {
@@ -622,7 +719,6 @@ namespace RealisticWagon
                     }
                 }
             }
-            WagonRotation = Quaternion.FromToRotation(Vector3.up, hit.normal);
         }
 
         private static void SetWagonPositionAndRotation(bool front = false)
@@ -648,7 +744,8 @@ namespace RealisticWagon
                 else
                     WagonPosition = hit.point + (hit.transform.up * 0.8f);
 
-                WagonRotation = Quaternion.FromToRotation(Vector3.up, hit.normal);
+                if (WagonRotation == null)
+                    WagonRotation = Quaternion.FromToRotation(Vector3.up, hit.normal);
             }
         }        
 
@@ -670,22 +767,32 @@ namespace RealisticWagon
                 }
                 else if (!GameManager.Instance.PlayerController.isGrounded)
                 {
-                    DaggerfallUI.MessageBox("You are unable to levitate your wagon.");
+                    DaggerfallUI.AddHUDText("You are unable to levitate your wagon");
                 }
                 else
                 {
-                    DaggerfallUnityItem WagonItem = ItemBuilder.CreateItem(ItemGroups.Transportation, (int)Transportation.Small_cart);
-                    DestroyWagon();
-                    GameManager.Instance.PlayerEntity.Items.AddItem(WagonItem);
-                    WagonDeployed = false;
-                    WagonMatrix = new Matrix4x4();
-                    transportManager.TransportMode = TransportModes.Cart;
-                    DaggerfallUI.MessageBox("You hitch your wagon.");                   
+                    DaggerfallUnityItem newWagon = ItemBuilder.CreateItem(ItemGroups.Transportation, (int)Transportation.Small_cart);
+                    if (WagonItem == null)
+                    {
+                        WagonItem = newWagon;
+                    }
+                    newWagon.currentCondition = WagonItem.currentCondition;
+                    if (WagonItem.currentCondition >= 1)
+                    {
+                        DestroyWagon();
+                        GameManager.Instance.PlayerEntity.Items.AddItem(newWagon);
+                        WagonDeployed = false;
+                        WagonMatrix = new Matrix4x4();
+                        transportManager.TransportMode = TransportModes.Cart;
+                        DaggerfallUI.AddHUDText("You hitch your wagon");                   
+                    }
+                    else
+                        DaggerfallUI.AddHUDText("Your wagon is broken");
                 }
             }
             else
             {
-                DaggerfallUI.MessageBox("This is not your wagon.");
+                DaggerfallUI.AddHUDText("This is not your wagon");
             }
         }
 
@@ -716,19 +823,26 @@ namespace RealisticWagon
 
         private static void PlaceHorse(bool fromSave = false)
         {
+            GameObject player = GameObject.FindGameObjectWithTag("Player");
+            Horse = MeshReplacement.ImportCustomFlatGameobject(templateIndex_Horse, 0, HorsePosition, null);
+            if (Horse == null)
+                Horse = GameObjectHelper.CreateDaggerfallBillboardGameObject(templateIndex_Horse, 0, null);
             if (fromSave == false)
             {
                 HorseMapPixel = GameManager.Instance.PlayerGPS.CurrentMapPixel;
                 SetHorsePositionAndRotation();
+                Horse.transform.SetPositionAndRotation(HorsePosition, HorseRotation);
+                //Horse.transform.LookAt(player.transform.position - (Vector3.up * 1.3f), Vector3.up);
+                //Horse.transform.LookAt(player.transform.position - Vector3.up, Vector3.up);
+                Vector3 horseTarget = new Vector3(player.transform.position.x, Horse.transform.position.y, player.transform.position.z);
+                Horse.transform.LookAt(horseTarget, Vector3.up);
+                HorseRotation = Horse.transform.rotation;
             }
             else
-            {
-                PlaceHorseOnGround();
-            }
-            //GameObject HorseBill = MeshReplacement.ImportCustomFlatGameobject(538, 1, HorsePosition, null);
-            Horse = GameObjectHelper.CreateDaggerfallBillboardGameObject(201, 0, null);
+                Horse.transform.SetPositionAndRotation(HorsePosition, HorseRotation);
 
-            Horse.transform.SetPositionAndRotation(HorsePosition, HorseRotation);
+            if (Horse.GetComponent<BoxCollider>() == null)
+                AddTrigger(Horse);
             if (GameManager.Instance.PlayerEnterExit.IsPlayerInsideDungeon)
             {
                 Horse.SetActive(false);
@@ -743,31 +857,43 @@ namespace RealisticWagon
 
         private static void PlaceHorseOnGround()
         {
+            GameObject player = GameObject.FindGameObjectWithTag("Player");
             RaycastHit hit;
+            bool modelReplacement = false;
+            if (Horse != null && Horse.GetComponent<DaggerfallBillboard>() == null)
+                modelReplacement = true;
             Ray rayDown = new Ray(HorsePosition, Vector3.down);
             if (Physics.Raycast(rayDown, out hit, 10000))
             {
-                HorsePosition = hit.point + (hit.transform.up * 1.1f);
-                HorseRotation = Quaternion.FromToRotation(Vector3.up, hit.normal);
+                Debug.Log("[Realistic Wagon] hit = " + hit.ToString());
+                if (modelReplacement)
+                    HorsePosition = hit.point;
+                else
+                    HorsePosition = hit.point + (Vector3.up * 1.1f);
             }
             else
             {
-                GameObject player = GameObject.FindGameObjectWithTag("Player");
                 Vector3 newHorsePos = HorsePosition;
                 newHorsePos.y = player.transform.position.y;
-                Ray rayFromPlayer = new Ray(newHorsePos + Vector3.up, Vector3.down);
+                Ray rayFromPlayer = new Ray(newHorsePos + (Vector3.up * 0.5f), Vector3.down);
                 if (Physics.Raycast(rayFromPlayer, out hit, 1000))
                 {
-                    HorsePosition = hit.point + (hit.transform.up * 1.1f);
-                    HorseRotation = Quaternion.FromToRotation(Vector3.up, hit.normal);
+                    Debug.Log("[Realistic Wagon] hit = " + hit.ToString());
+                    if (modelReplacement)
+                        HorsePosition = hit.point;
+                    else
+                        HorsePosition = hit.point + (hit.transform.up * 1.1f);
                 }
                 else
                 {
                     Ray rayUp = new Ray(newHorsePos + (Vector3.up * 500f), Vector3.down);
                     if (Physics.Raycast(rayUp, out hit, 1000))
                     {
-                        HorsePosition = hit.point + (hit.transform.up * 1.1f);
-                        HorseRotation = Quaternion.FromToRotation(Vector3.up, hit.normal);
+                        Debug.Log("[Realistic Wagon] hit = " + hit.ToString());
+                        if (modelReplacement)
+                            HorsePosition = hit.point;
+                        else
+                            HorsePosition = hit.point + (hit.transform.up * 1.1f);
                     }
                 }
             }
@@ -778,17 +904,24 @@ namespace RealisticWagon
             GameObject player = GameManager.Instance.PlayerObject;
             HorsePosition = player.transform.position - (player.transform.forward * 1.5f);
             HorseMatrix = player.transform.localToWorldMatrix;
-
+            bool modelReplacement = false;
+            if (Horse != null && Horse.GetComponent<DaggerfallBillboard>() == null)
+                modelReplacement = true;
             RaycastHit hit;
             Ray ray = new Ray(HorsePosition, Vector3.down);
             if (Physics.Raycast(ray, out hit, 10))
             {
-                HorsePosition = hit.point + (hit.transform.up * 1.1f);
+                if (modelReplacement)
+                    HorsePosition = hit.point;
+                else
+                    HorsePosition = hit.point + (hit.transform.up * 1.1f);
                 HorseRotation = Quaternion.FromToRotation(Vector3.up, hit.normal);
+
+                Debug.Log("[Realistic Wagon] horserotation set by SetHorsePositionAndRotation()");
             }
             else
             {
-                Debug.Log("Setting tent position and rotation failed");
+                Debug.Log("Setting horse position and rotation failed");
             }
         }
 
@@ -808,7 +941,7 @@ namespace RealisticWagon
                 }
                 else if (!GameManager.Instance.PlayerController.isGrounded)
                 {
-                    DaggerfallUI.MessageBox(HorseName+" is unable to levitate.");
+                    DaggerfallUI.AddHUDText(HorseName+" is unable to levitate.");
                 }
                 else
                 {
@@ -818,12 +951,34 @@ namespace RealisticWagon
                     HorseDeployed = false;
                     HorseMatrix = new Matrix4x4();
                     transportManager.TransportMode = TransportModes.Horse;
-                    DaggerfallUI.MessageBox("You mount " + HorseName + ".");                    
+                    DaggerfallUI.AddHUDText("You mount " + HorseName + ".");
+                    if (WagonDeployed)
+                    {
+                        GameObject player = GameManager.Instance.PlayerObject;
+                        float dist = Vector3.Distance(player.transform.position, WagonPosition);
+                        Debug.Log("Dsitance to wagon = " + dist.ToString());
+
+                        if (dist < 5 && WagonItem.currentCondition >= 1)
+                        {
+                            DaggerfallUnityItem newWagon = ItemBuilder.CreateItem(ItemGroups.Transportation, (int)Transportation.Small_cart);
+                            if (WagonItem == null)
+                            {
+                                WagonItem = newWagon;
+                            }
+                            newWagon.currentCondition = WagonItem.currentCondition;
+                            DestroyWagon();
+                            GameManager.Instance.PlayerEntity.Items.AddItem(newWagon);
+                            WagonDeployed = false;
+                            WagonMatrix = new Matrix4x4();
+                            transportManager.TransportMode = TransportModes.Cart;
+                            DaggerfallUI.AddHUDText("You hitch your wagon.");
+                        }
+                    }
                 }
             }
             else
             {
-                DaggerfallUI.MessageBox("This is not " + HorseName + ".");
+                DaggerfallUI.AddHUDText("This is not " + HorseName + ".");
             }
         }
 
@@ -932,6 +1087,254 @@ namespace RealisticWagon
         }
 
 
+        static bool CallHorse(DaggerfallUnityItem item, ItemCollection collection)
+        {
+            
+            if (!HorseDeployed)
+                DaggerfallUI.MessageBox("You have no horse to call.");
+            else if (!playerEnterExit.IsPlayerInside && GameManager.Instance.PlayerController.isGrounded && IsHorseClose())
+            {
+                item.weightInKg -= 0.1f;
+                if (item.weightInKg <= 0)
+                    playerEntity.Items.RemoveItem(item);
+                DestroyHorse();
+                PlaceHorse();
+                DaggerfallUI.MessageBox(HorseName + " trots up to you.");
+            }
+            else
+                DaggerfallUI.MessageBox(HorseName + " is too far away.");
+            return false;
+        }
+
+        static bool RepairWagon(DaggerfallUnityItem parts, ItemCollection collection)
+        {
+            bool hasCart = GameManager.Instance.TransportManager.HasCart();
+            if (!hasCart)
+            {
+                if (WagonDeployed)
+                {
+                    GameObject player = GameManager.Instance.PlayerObject;
+                    float dist = Vector3.Distance(player.transform.position, WagonPosition);
+                    if (dist < 5)
+                    {
+                        if (WagonItem == null)
+                        {
+                            DaggerfallUnityItem newWagon = ItemBuilder.CreateItem(ItemGroups.Transportation, (int)Transportation.Small_cart);
+                            WagonItem = newWagon;
+                        }
+                        int wagonDmg = WagonItem.maxCondition - WagonItem.currentCondition;
+                        if (wagonDmg == 0)
+                        {
+                            DaggerfallUI.MessageBox("Your wagon is not in need of repair.");
+                        }
+                        else
+                        {
+                            if (parts.currentCondition >= wagonDmg)
+                            {
+                                WagonItem.currentCondition = WagonItem.maxCondition;
+                                parts.currentCondition -= wagonDmg;
+                            }
+                            else if (parts.currentCondition < wagonDmg)
+                            {
+                                WagonItem.currentCondition += parts.currentCondition;
+                                GameManager.Instance.PlayerEntity.Items.RemoveItem(parts);
+                                GameManager.Instance.PlayerEntity.WagonItems.RemoveItem(parts);
+                            }
+                            DaggerfallDateTime timeNow = DaggerfallUnity.Instance.WorldTime.Now;
+                            timeNow.RaiseTime(wagonDmg * 2);
+                            GameManager.Instance.PlayerEntity.CurrentFatigue /= 2;
+                            DaggerfallUI.MessageBox("You repair the wagon.");
+                        }
+                        
+                    }
+                    else
+                        DaggerfallUI.MessageBox("Your wagon is too far away.");
+                }
+                else
+                    DaggerfallUI.MessageBox("You do not own a wagon to repair.");
+            }
+            else if (hasCart)
+            {
+                if (!GameManager.Instance.PlayerEnterExit.IsPlayerInside)
+                {
+                    ItemCollection playerItems = GameManager.Instance.PlayerEntity.Items;
+                    for (int i = 0; i < playerItems.Count; i++)
+                    {
+                        DaggerfallUnityItem wagon = playerItems.GetItem(i);
+                        if (wagon != null && wagon.IsOfTemplate(ItemGroups.Transportation, (int)Transportation.Small_cart))
+                        {
+                            int wagonDmg = wagon.maxCondition - wagon.currentCondition;
+                            if (wagonDmg == 0)
+                            {
+                                DaggerfallUI.MessageBox("Your wagon is not in need of repair.");
+                            }
+                            else
+                            {
+                                if (parts.currentCondition >= wagonDmg)
+                                {
+                                    wagon.currentCondition = wagon.maxCondition;
+                                    parts.currentCondition -= wagonDmg;
+                                }
+                                else if (parts.currentCondition < wagonDmg)
+                                {
+                                    wagon.currentCondition += parts.currentCondition;
+                                    GameManager.Instance.PlayerEntity.Items.RemoveItem(parts);
+                                    GameManager.Instance.PlayerEntity.WagonItems.RemoveItem(parts);
+                                }
+                                WagonItem = wagon;
+                                DaggerfallUI.MessageBox("You repair the wagon.");
+                            }
+                        }
+                    }
+                }
+                else
+                    DaggerfallUI.MessageBox("Your wagon is too far away.");
+               
+            }
+
+            return false;
+        }
+
+        private static void OnNewMagicRound_WagonDamage()
+        {
+            WagonDmgCounter++;
+            if (WagonDmgCounter >= 5)
+            {
+                WagonDmgCounter = 0;
+                bool ingame = !DaggerfallUI.Instance.FadeBehaviour.FadeInProgress && !GameManager.Instance.IsPlayerOnHUD;
+                if (ingame && GameManager.Instance.TransportManager.HasCart() && !GameManager.Instance.PlayerMotor.IsStandingStill && !playerEnterExit.IsPlayerInside)
+                {
+                    int wagonDamage = WagonDamage();
+                    string dmgText = "";
+                    if (wagonDamage >= 1)
+                    {
+                        ItemCollection playerItems = GameManager.Instance.PlayerEntity.Items;
+                        for (int i = 0; i < playerItems.Count; i++)
+                        {
+                            DaggerfallUnityItem item = playerItems.GetItem(i);
+                            if (item != null && item.IsOfTemplate(ItemGroups.Transportation, (int)Transportation.Small_cart))
+                            {
+                                item.currentCondition -= wagonDamage;
+                                WagonItem = item;
+                                if (item.currentCondition <= 0)
+                                    playerItems.RemoveItem(item);
+                            }
+                        }
+
+                        if (WagonItem == null)
+                        {
+                            DaggerfallUnityItem newWagon = ItemBuilder.CreateItem(ItemGroups.Transportation, (int)Transportation.Small_cart);
+                            WagonItem = newWagon;
+                        }
+
+                        if (WagonItem.currentCondition <= 0)
+                        {
+                            ModManager.Instance.SendModMessage("TravelOptions", "pauseTravel");
+                            DaggerfallUI.MessageBox("With a loud wooden crack, the wagon breaks down.");
+                            PlaceWagon();
+                            transportManager.TransportMode = TransportModes.Horse;
+                        }
+                        else if (WagonItem.currentCondition <= (WagonItem.maxCondition / 6))
+                        {
+                            dmgText = "The wagon makes a loud creaking sound...";
+                        }
+                        else if (WagonItem.currentCondition <= (WagonItem.maxCondition / 3))
+                        {
+                            dmgText = "The wagon squeaks and creaks...";
+                        }
+
+                        if (dmgText != "" && Dice100.SuccessRoll(30))
+                        {
+                            ModManager.Instance.SendModMessage("TravelOptions", "isTravelActive", null, (string message, object data) =>
+                            {
+                                if ((bool)data)
+                                    ModManager.Instance.SendModMessage("TravelOptions", "showMessage", dmgText);
+                                else
+                                    DaggerfallUI.AddHUDText(dmgText);
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        private static int WagonDamage()
+        {
+            int dmg = 0;
+            bool roadFollow = true;
+            bool pathFollow = true;
+            ModManager.Instance.SendModMessage("TravelOptions", "isFollowingRoad", null, (string message, object data) =>
+            {
+                roadFollow = (bool)data;
+            });
+
+            ModManager.Instance.SendModMessage("TravelOptions", "isPathFollowing", null, (string message, object data) =>
+            {
+                pathFollow = (bool)data;
+            });
+
+
+            PlayerGPS playerGPS = GameManager.Instance.PlayerGPS;
+
+            if (!playerGPS.IsPlayerInLocationRect)
+            {
+                switch (playerGPS.CurrentClimateIndex)
+                {
+                    case (int)MapsFile.Climates.Desert2:
+                    case (int)MapsFile.Climates.Desert:
+                    case (int)MapsFile.Climates.Subtropical:
+                        dmg += 1;
+                        break;
+                    case (int)MapsFile.Climates.Rainforest:
+                    case (int)MapsFile.Climates.Swamp:
+                        dmg += 3;
+                        break;
+                    case (int)MapsFile.Climates.Woodlands:
+                    case (int)MapsFile.Climates.HauntedWoodlands:
+                        dmg += 2;
+                        break;
+                    case (int)MapsFile.Climates.MountainWoods:
+                    case (int)MapsFile.Climates.Mountain:
+                        dmg += 5;
+                        break;
+                }
+            }
+            if (!pathFollow && !roadFollow)
+                dmg *= 2;
+            else if (pathFollow && !roadFollow)
+                dmg += 1;
+
+            if (GameManager.Instance.PlayerEntity.WagonWeight > ItemHelper.WagonKgLimit / 3)
+                dmg += 1;
+
+            return dmg;
+        }
+
+        private static bool IsHorseClose()
+        {
+            int playerX = GameManager.Instance.PlayerGPS.CurrentMapPixel.X;
+            int playerY = GameManager.Instance.PlayerGPS.CurrentMapPixel.Y;
+            return Math.Abs(playerX - HorseMapPixel.X) <= 1 && Math.Abs(playerY - HorseMapPixel.Y) <= 1;
+        }
+
+        private static bool IsWagonClose()
+        {
+            int playerX = GameManager.Instance.PlayerGPS.CurrentMapPixel.X;
+            int playerY = GameManager.Instance.PlayerGPS.CurrentMapPixel.Y;
+            return playerX == WagonMapPixel.X && playerY == WagonMapPixel.Y;
+        }
+
+        private static void AddTrigger(GameObject obj)
+        {
+            Debug.Log("[Realistic Wagon] AddTrigger() " + obj.name);
+            BoxCollider boxTrigger = obj.AddComponent<BoxCollider>();
+            {
+                boxTrigger.isTrigger = true;
+                boxTrigger.center = new Vector3(0f, 1f, -0.5f);
+                boxTrigger.size = new Vector3(0.5f, 2f, 2.3f);
+            }
+        }
+
         public static void RegisterRWCommands()
         {
             Debug.Log("[Realistic Wagon] Trying to register console commands.");
@@ -978,7 +1381,7 @@ namespace RealisticWagon
             public static string Execute(params string[] args)
             {
                 string result = "error";
-                if (!WagonDeployed)
+                if (!HorseDeployed)
                     result = "No horse to rescue";
                 else if (!playerEnterExit.IsPlayerInside && GameManager.Instance.PlayerController.isGrounded)
                 {

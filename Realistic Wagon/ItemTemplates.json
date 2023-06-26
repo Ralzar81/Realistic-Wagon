@@ -1,0 +1,48 @@
+[    
+    {
+        "index": 94,
+        "worldTextureArchive": 548,
+        "playerTextureArchive": 548,
+    },
+    {
+        "index": 541,
+        "name": "Sugar Lumps",
+        "baseWeight": 0.8,
+        "hitPoints": 5,
+        "capacityOrTarget": 0,
+        "basePrice": 10,
+        "enchantmentPoints": 0,
+        "rarity": 5,
+        "variants": 0,
+        "drawOrderOrEffect": 0,
+        "isBluntWeapon": false,
+        "isLiquid": false,
+        "isOneHanded": false,
+        "isIngredient": false,
+        "worldTextureArchive": 216,
+        "worldTextureRecord": 30,
+        "playerTextureArchive": 0,
+        "playerTextureRecord": 0
+    },
+
+    {
+        "index": 542,
+        "name": "Wagon Parts",
+        "baseWeight": 20.0,
+        "hitPoints": 500,
+        "capacityOrTarget": 0,
+        "basePrice": 300,
+        "enchantmentPoints": 0,
+        "rarity": 2,
+        "variants": 0,
+        "drawOrderOrEffect": 0,
+        "isBluntWeapon": false,
+        "isLiquid": false,
+        "isOneHanded": false,
+        "isIngredient": false,
+        "worldTextureArchive": 211,
+        "worldTextureRecord": 17,
+        "playerTextureArchive": 0,
+        "playerTextureRecord": 0
+    }
+]
